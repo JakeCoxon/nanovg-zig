@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
     nanovg_mod.addIncludePath(b.path("src"));
+    nanovg_mod.addIncludePath(b.path("src/headers"));
     nanovg_mod.addIncludePath(b.path("lib/gl2/include"));
     nanovg_mod.addCSourceFile(.{ .file = b.path("src/fontstash.c"), .flags = &.{ "-DFONS_NO_STDIO", "-fno-stack-protector" } });
     nanovg_mod.addCSourceFile(.{ .file = b.path("src/stb_image.c"), .flags = &.{ "-DSTBI_NO_STDIO", "-fno-stack-protector" } });
@@ -18,7 +19,8 @@ pub fn build(b: *std.Build) !void {
     if (target.result.cpu.arch.isWasm()) {
         const demo_wasm = installDemo(b, target, optimize, "demo", "examples/example_wasm.zig", nanovg_mod);
         demo_wasm.addIncludePath(b.path("examples"));
-        demo_wasm.addCSourceFile(.{ .file = b.path("examples/stb_image_write.c"), .flags = &.{ "-DSTBI_NO_STDIO", "-fno-stack-protector" } });
+        demo_wasm.addIncludePath(b.path("src/headers"));
+        demo_wasm.addCSourceFile(.{ .file = b.path("examples/stb_image_write.c"), .flags = &.{ "-DSTBI_NO_STDIO -DSTBI_WRITE_NO_STDIO", "-fno-stack-protector" } });
     } else {
         const demo_glfw = installDemo(b, target, optimize, "demo_glfw", "examples/example_glfw.zig", nanovg_mod);
         demo_glfw.addIncludePath(b.path("examples"));

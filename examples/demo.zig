@@ -81,63 +81,71 @@ pub fn free(demo: Demo, vg: nvg) void {
 }
 
 pub fn draw(demo: Demo, vg: nvg, mx: f32, my: f32, width: f32, height: f32, t: f32, blowup: bool) void {
-    drawEyes(vg, width - 250, 50, 150, 100, mx, my, t);
-    drawParagraph(vg, width - 450, 50, 150, 100, mx, my);
-    drawGraph(vg, 0, height / 2, width, height / 2, t);
-    drawColorwheel(vg, width - 300, height - 300, 250, 250, t);
+    _ = demo;
+    _ = mx;
+    _ = my;
+    _ = width;
+    _ = height;
+    _ = t;
+    _ = blowup;
+
+    // drawEyes(vg, width - 250, 50, 150, 100, mx, my, t);
+    // drawParagraph(vg, width - 450, 50, 150, 100, mx, my);
+    // drawGraph(vg, 0, height / 2, width, height / 2, t);
+    // drawColorwheel(vg, width - 300, height - 300, 250, 250, t);
 
     // Line joints
-    drawLines(vg, 120, height - 50, 600, 50, t);
+    // drawLines(vg, 120, height - 50, 600, 50, t);
 
     // Line widths
     drawWidths(vg, 10, 50, 30);
 
     // Line caps
-    drawCaps(vg, 10, 300, 30);
+    // drawCaps(vg, 10, 300, 30);
 
-    drawScissor(vg, 50, height - 80, t);
+    // drawScissor(vg, 50, height - 80, t);
 
-    vg.save();
-    if (blowup) {
-        vg.rotate(@sin(t * 0.3) * 5.0 / 180.0 * std.math.pi);
-        vg.scale(2.0, 2.0);
-    }
+    // vg.save();
+    // if (blowup) {
+    //     vg.rotate(@sin(t * 0.3) * 5.0 / 180.0 * std.math.pi);
+    //     vg.scale(2.0, 2.0);
+    // }
 
-    // Widgets
-    drawWindow(vg, "Widgets `n Stuff", 50, 50, 300, 400);
-    const x: f32 = 60;
-    var y: f32 = 95;
-    drawSearchBox(vg, "Search", x, y, 280, 25);
-    y += 40;
-    drawDropDown(vg, "Effects", x, y, 280, 28);
-    const popy = y + 14;
-    y += 45;
+    // // Widgets
+    // drawWindow(vg, "Widgets `n Stuff", 50, 50, 300, 400);
+    // const x: f32 = 60;
+    // var y: f32 = 95;
+    // drawSearchBox(vg, "Search", x, y, 280, 25);
+    // y += 40;
+    // drawDropDown(vg, "Effects", x, y, 280, 28);
+    // const popy = y + 14;
+    // y += 45;
 
-    // Form
-    drawLabel(vg, "Login", x, y, 280, 20);
-    y += 25;
-    drawEditBox(vg, "Email", x, y, 280, 28);
-    y += 35;
-    drawEditBox(vg, "Password", x, y, 280, 28);
-    y += 38;
-    drawCheckBox(vg, "Remember me", x, y, 140, 28);
-    drawButton(vg, ICON_LOGIN, "Sign in", x + 138, y, 140, 28, nvg.rgba(0, 96, 128, 255));
-    y += 45;
+    // // Form
+    // drawLabel(vg, "Login", x, y, 280, 20);
+    // y += 25;
+    // drawEditBox(vg, "Email", x, y, 280, 28);
+    // y += 35;
+    // drawEditBox(vg, "Password", x, y, 280, 28);
+    // y += 38;
+    // drawCheckBox(vg, "Remember me", x, y, 140, 28);
+    // drawButton(vg, ICON_LOGIN, "Sign in", x + 138, y, 140, 28, nvg.rgba(0, 96, 128, 255));
+    // y += 45;
 
-    // Slider
-    drawLabel(vg, "Diameter", x, y, 280, 20);
-    y += 25;
-    drawEditBoxNum(vg, "123.00", "px", x + 180, y, 100, 28);
-    drawSlider(vg, 0.4, x, y, 170, 28);
-    y += 55;
+    // // Slider
+    // drawLabel(vg, "Diameter", x, y, 280, 20);
+    // y += 25;
+    // drawEditBoxNum(vg, "123.00", "px", x + 180, y, 100, 28);
+    // drawSlider(vg, 0.4, x, y, 170, 28);
+    // y += 55;
 
-    drawButton(vg, ICON_TRASH, "Delete", x, y, 160, 28, nvg.rgba(128, 16, 8, 255));
-    drawButton(vg, 0, "Cancel", x + 170, y, 110, 28, nvg.rgba(0, 0, 0, 0));
+    // drawButton(vg, ICON_TRASH, "Delete", x, y, 160, 28, nvg.rgba(128, 16, 8, 255));
+    // drawButton(vg, 0, "Cancel", x + 170, y, 110, 28, nvg.rgba(0, 0, 0, 0));
 
-    // Thumbnails box
-    drawThumbnails(vg, 365, popy - 30, 160, 300, demo.images[0..], t);
+    // // Thumbnails box
+    // drawThumbnails(vg, 365, popy - 30, 160, 300, demo.images[0..], t);
 
-    vg.restore();
+    // vg.restore();
 }
 
 fn drawWindow(vg: nvg, title: [:0]const u8, x: f32, y: f32, w: f32, h: f32) void {

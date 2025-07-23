@@ -112,6 +112,10 @@ export fn clip() void {
     vg.clip();
 }
 
+export fn clearClip() void {
+    vg.clearClip();
+}
+
 export fn pathWinding(winding: i32) void {
     vg.pathWinding(if (winding == 0) nvg.Winding.cw else nvg.Winding.ccw);
 }

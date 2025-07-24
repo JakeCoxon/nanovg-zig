@@ -279,7 +279,7 @@ pub const Context = struct {
 
     pub fn beginFrame(ctx: *Context, window_width: f32, window_height: f32, device_pixel_ratio: f32) void {
         ctx.cache.clip_verts.clearRetainingCapacity();
-        ctx.cache.clip_paths.clearRetainingCapacity(); // TODO(jake): Maybe something else here
+        ctx.cache.clip_paths.clearRetainingCapacity();
 
         ctx.states.clearRetainingCapacity();
         ctx.save();
@@ -683,6 +683,15 @@ pub const Context = struct {
                 path.fill = &.{};
                 path.stroke = dst.items;
             }
+
+            // Bounds may have changed
+            for (dst.items) |item| {
+                ctx.cache.bounds[0] = @min(ctx.cache.bounds[0], item.x);
+                ctx.cache.bounds[1] = @min(ctx.cache.bounds[1], item.y);
+                ctx.cache.bounds[2] = @max(ctx.cache.bounds[2], item.x);
+                ctx.cache.bounds[3] = @max(ctx.cache.bounds[3], item.y);
+            }
+
             verts = verts[dst.items.len..verts.len];
         }
     }
@@ -943,7 +952,6 @@ pub const Context = struct {
             const j = ctx.cache.clip_verts.items.len;
             new_path.fill = ctx.cache.clip_verts.items[i..j];
         }
-        ctx.cache.paths.clearRetainingCapacity();
     }
 
     pub fn clearClip(ctx: *Context) void {
@@ -1167,9 +1175,6 @@ pub const Context = struct {
         if (ctx.cache.paths.items.len == 0) return;
 
         ctx.expandFill(.miter, 2.4) catch return;
-
-        // Render fill with no clip paths
-        // ctx.params.renderFill(ctx.params.user_ptr, &fill_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, &.{}, ctx.cache.paths.items);
 
         ctx.params.renderFill(ctx.params.user_ptr, &fill_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, ctx.cache.clip_paths.items, ctx.cache.paths.items);
 

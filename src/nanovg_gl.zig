@@ -44,7 +44,7 @@ pub fn init(allocator: Allocator, options: Options) !nvg {
     };
 }
 
-const GLContext = struct {
+pub const GLContext = struct {
     allocator: Allocator,
     options: Options,
     shader: Shader,
@@ -83,7 +83,7 @@ const GLContext = struct {
         ctx.allocator.destroy(ctx);
     }
 
-    fn castPtr(ptr: *anyopaque) *GLContext {
+    pub fn castPtr(ptr: *anyopaque) *GLContext {
         return @alignCast(@ptrCast(ptr));
     }
 
@@ -114,7 +114,7 @@ const GLContext = struct {
         return tex;
     }
 
-    fn findTexture(ctx: *GLContext, id: i32) ?*Texture {
+    pub fn findTexture(ctx: *GLContext, id: i32) ?*Texture {
         for (ctx.textures.items) |*tex| {
             if (tex.id == id) return tex;
         }

@@ -307,6 +307,11 @@ export fn drawDemo() void {
     demo.draw(vg, mx, my, video_width, video_height, t, blowup);
 }
 
+export fn findTexture(handle: i32) u32 {
+    const gl_ctx: *nvg.gl.GLContext = nvg.gl.GLContext.castPtr(vg.ctx.params.user_ptr);
+    return gl_ctx.findTexture(handle).?.tex;
+}
+
 export fn onAnimationFrame() void {
     //    const t = wasm.performanceNow() / 1000.0;
     //    const dt = t - prevt;

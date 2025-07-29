@@ -278,6 +278,9 @@ pub const Context = struct {
     }
 
     pub fn beginFrame(ctx: *Context, window_width: f32, window_height: f32, device_pixel_ratio: f32) void {
+        ctx.cache.clip_verts.clearRetainingCapacity();
+        ctx.cache.clip_paths.clearRetainingCapacity();
+
         ctx.states.clearRetainingCapacity();
         ctx.save();
         ctx.reset();
@@ -361,7 +364,7 @@ pub const Context = struct {
                     i += 7;
                 },
                 .winding => i += 2,
-                .close, .clip => i += 1,
+                .close => i += 1,
             }
         }
 
@@ -438,10 +441,6 @@ pub const Context = struct {
                 .winding => {
                     cache.pathWinding(@enumFromInt(@as(u2, @intFromFloat(ctx.commands.items[i + 1]))));
                     i += 2;
-                },
-                .clip => {
-                    cache.clip();
-                    i += 1;
                 },
             }
         }
@@ -684,6 +683,15 @@ pub const Context = struct {
                 path.fill = &.{};
                 path.stroke = dst.items;
             }
+
+            // Bounds may have changed
+            for (dst.items) |item| {
+                ctx.cache.bounds[0] = @min(ctx.cache.bounds[0], item.x);
+                ctx.cache.bounds[1] = @min(ctx.cache.bounds[1], item.y);
+                ctx.cache.bounds[2] = @max(ctx.cache.bounds[2], item.x);
+                ctx.cache.bounds[3] = @max(ctx.cache.bounds[3], item.y);
+            }
+
             verts = verts[dst.items.len..verts.len];
         }
     }
@@ -927,7 +935,27 @@ pub const Context = struct {
     }
 
     pub fn clip(ctx: *Context) void {
-        ctx.appendCommands(.{Command.clip.toValue()});
+        // Create a clip path fill from the current path
+        ctx.flattenPaths();
+        ctx.expandFill(.miter, 2.4) catch return;
+
+        // Copy all paths to clip_paths
+        ctx.cache.clip_paths.clearRetainingCapacity();
+        ctx.cache.clip_verts.clearRetainingCapacity();
+        for (ctx.cache.paths.items) |*path| {
+            const new_path = ctx.cache.clip_paths.addOne() catch return;
+            new_path.* = path.*;
+            const i = ctx.cache.clip_verts.items.len;
+            for (path.fill) |*p| {
+                ctx.cache.clip_verts.addOneAssumeCapacity().set(p.x, p.y, 0.5, 1);
+            }
+            const j = ctx.cache.clip_verts.items.len;
+            new_path.fill = ctx.cache.clip_verts.items[i..j];
+        }
+    }
+
+    pub fn clearClip(ctx: *Context) void {
+        ctx.cache.clip_paths.clearRetainingCapacity();
     }
 
     pub fn imageSize(ctx: *Context, image: i32, w: *u32, h: *u32) void {
@@ -1148,14 +1176,7 @@ pub const Context = struct {
 
         ctx.expandFill(.miter, 2.4) catch return;
 
-        if (ctx.cache.paths.items[0].clip) {
-            // Find position where clip paths end
-            var i: usize = 0;
-            while (i < ctx.cache.paths.items.len and ctx.cache.paths.items[i].clip) : (i += 1) {}
-            ctx.params.renderFill(ctx.params.user_ptr, &fill_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, ctx.cache.paths.items[0..i], ctx.cache.paths.items[i..]);
-        } else {
-            ctx.params.renderFill(ctx.params.user_ptr, &fill_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, &.{}, ctx.cache.paths.items);
-        }
+        ctx.params.renderFill(ctx.params.user_ptr, &fill_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, ctx.cache.clip_paths.items, ctx.cache.paths.items);
 
         // Count triangles
         for (ctx.cache.paths.items) |path| {
@@ -1180,14 +1201,7 @@ pub const Context = struct {
 
         ctx.expandStroke(stroke_width * 0.5, state.line_cap, state.line_join, state.miter_limit) catch return;
 
-        if (ctx.cache.paths.items[0].clip) {
-            // Find position where clip paths end
-            var i: usize = 0;
-            while (i < ctx.cache.paths.items.len and ctx.cache.paths.items[i].clip) : (i += 1) {}
-            ctx.params.renderStroke(ctx.params.user_ptr, &stroke_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, ctx.cache.paths.items[0..i], ctx.cache.paths.items[i..]);
-        } else {
-            ctx.params.renderStroke(ctx.params.user_ptr, &stroke_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, &.{}, ctx.cache.paths.items);
-        }
+        ctx.params.renderStroke(ctx.params.user_ptr, &stroke_paint, state.composite_operation, &state.scissor, ctx.cache.bounds, ctx.cache.clip_paths.items, ctx.cache.paths.items);
 
         // Count triangles
         for (ctx.cache.paths.items) |path| {
@@ -1775,7 +1789,6 @@ const Command = enum(i32) {
     bezier_to = 2,
     close = 3,
     winding = 4,
-    clip = 5,
 
     fn fromValue(val: f32) Command {
         return @enumFromInt(@as(i32, @intFromFloat(val)));
@@ -1884,6 +1897,8 @@ const PathCache = struct {
     allocator: Allocator,
     points: ArrayList(Point),
     paths: ArrayList(Path),
+    clip_paths: ArrayList(Path),
+    clip_verts: ArrayList(Vertex),
     verts: ArrayList(Vertex),
     bounds: [4]f32 = [_]f32{0} ** 4,
 
@@ -1892,11 +1907,15 @@ const PathCache = struct {
             .allocator = allocator,
             .points = try ArrayList(Point).initCapacity(allocator, 128),
             .paths = try ArrayList(Path).initCapacity(allocator, 16),
+            .clip_paths = try ArrayList(Path).initCapacity(allocator, 16),
+            .clip_verts = try ArrayList(Vertex).initCapacity(allocator, 256),
             .verts = try ArrayList(Vertex).initCapacity(allocator, 256),
         };
         errdefer cache.deinit();
         try cache.points.ensureTotalCapacity(128);
         try cache.paths.ensureTotalCapacity(16);
+        try cache.clip_paths.ensureTotalCapacity(16);
+        try cache.clip_verts.ensureTotalCapacity(256);
         try cache.verts.ensureTotalCapacity(256);
         return cache;
     }
@@ -1904,6 +1923,8 @@ const PathCache = struct {
     fn deinit(cache: *PathCache) void {
         cache.points.deinit();
         cache.paths.deinit();
+        cache.clip_paths.deinit();
+        cache.clip_verts.deinit();
         cache.verts.deinit();
     }
 
@@ -1974,12 +1995,6 @@ const PathCache = struct {
     fn pathWinding(cache: *PathCache, winding: nvg.Winding) void {
         if (cache.lastPath()) |path| {
             path.winding = winding;
-        }
-    }
-
-    fn clip(cache: *PathCache) void {
-        for (cache.paths.items) |*path| {
-            path.clip = true;
         }
     }
 };

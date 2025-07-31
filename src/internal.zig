@@ -287,7 +287,7 @@ pub const Context = struct {
 
         ctx.setDevicePixelRatio(device_pixel_ratio);
 
-        ctx.params.renderViewport(ctx.params.user_ptr, window_width, window_height, device_pixel_ratio);
+        ctx.params.renderBegin(ctx.params.user_ptr, window_width, window_height, device_pixel_ratio);
 
         ctx.draw_call_count = 0;
         ctx.fill_tri_count = 0;
@@ -1850,7 +1850,7 @@ pub const Params = struct {
     renderDeleteTexture: *const fn (uptr: *anyopaque, image: i32) void,
     renderUpdateTexture: *const fn (uptr: *anyopaque, image: i32, x: u32, y: u32, w: u32, h: u32, data: ?[]const u8) i32,
     renderGetTextureSize: *const fn (uptr: *anyopaque, image: i32, w: *u32, h: *u32) i32,
-    renderViewport: *const fn (uptr: *anyopaque, width: f32, height: f32, device_pixel_ratio: f32) void,
+    renderBegin: *const fn (uptr: *anyopaque, width: f32, height: f32, device_pixel_ratio: f32) void,
     renderCancel: *const fn (uptr: *anyopaque) void,
     renderFlush: *const fn (uptr: *anyopaque) void,
     renderFill: *const fn (uptr: *anyopaque, paint: *Paint, composite_operation: nvg.CompositeOperationState, scissor: *Scissor, bounds: [4]f32, clip_paths: []const Path, paths: []const Path) void,

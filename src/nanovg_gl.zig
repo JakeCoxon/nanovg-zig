@@ -31,7 +31,7 @@ pub fn init(allocator: Allocator, options: Options) !nvg {
         .renderDeleteTexture = renderDeleteTexture,
         .renderUpdateTexture = renderUpdateTexture,
         .renderGetTextureSize = renderGetTextureSize,
-        .renderViewport = renderViewport,
+        .renderBegin = renderBegin,
         .renderCancel = renderCancel,
         .renderFlush = renderFlush,
         .renderFill = renderFill,
@@ -56,6 +56,9 @@ const GLContext = struct {
     paths: ArrayList(Path),
     verts: ArrayList(internal.Vertex),
     uniforms: ArrayList(FragUniforms),
+
+    previous_clip_path_slice: []const internal.Path = &.{},
+    fullscreen_quad_offset: ?u32 = null,
 
     fn init(allocator: Allocator, options: Options) !*GLContext {
         const self = try allocator.create(GLContext);
@@ -336,32 +339,45 @@ const Blend = struct {
 
 const CallType = enum {
     fill,
-    fill_convex,
     stroke,
     triangles,
+    stencil,
 };
 
 const Call = struct {
     call_type: CallType,
     image: i32,
     colormap: i32,
-    clip_path_offset: u32,
-    clip_path_count: u32,
     path_offset: u32,
     path_count: u32,
     triangle_offset: u32,
     triangle_count: u32,
     uniform_offset: u32,
     blend_func: Blend,
+    clipped: bool = false,
+    convex: bool = false,
 
     // Stencils the clips paths into the most significant bit (0x80) of the stencil buffer
-    fn stencilClipPaths(call: Call, ctx: *GLContext) void {
-        const clip_paths = ctx.paths.items[call.clip_path_offset..][0..call.clip_path_count];
+    fn stencil(call: Call, ctx: *GLContext) void {
+        gl.glEnable(gl.GL_STENCIL_TEST);
+        defer gl.glDisable(gl.GL_STENCIL_TEST);
+
+        gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
+        defer gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
+
+        // Clear the entire framebuffer clip bit
+        gl.glStencilMask(0x80); // write‑enable only bit 7
+        defer gl.glStencilMask(0xFF);
+        gl.glClearStencil(0);
+        gl.glClear(gl.GL_STENCIL_BUFFER_BIT);
+
+        if (call.path_count == 0) return;
+
+        const clip_paths = ctx.paths.items[call.path_offset..][0..call.path_count];
 
         setUniformsSimple(ctx);
 
-        const convex = false;
-        if (convex) {
+        if (call.convex) {
             // Only write to the highest bit
             gl.glStencilMask(0x80);
             gl.glStencilFunc(gl.GL_ALWAYS, 0x80, 0xFF);
@@ -390,20 +406,31 @@ const Call = struct {
     }
 
     fn fill(call: Call, ctx: *GLContext) void {
+        defer if (call.clipped) gl.glDisable(gl.GL_STENCIL_TEST);
+        if (call.clipped) {
+            gl.glEnable(gl.GL_STENCIL_TEST);
+            gl.glStencilFunc(gl.GL_EQUAL, 0x80, 0x80);
+            gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP);
+        }
+
+        const paths = ctx.paths.items[call.path_offset..][0..call.path_count];
+
+        if (call.convex) {
+            setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
+            ctx.checkError("fill convex");
+
+            for (paths) |path| {
+                gl.glDrawArrays(gl.GL_TRIANGLE_FAN, @intCast(path.fill_offset), @intCast(path.fill_count));
+            }
+            return;
+        }
+
         gl.glEnable(gl.GL_STENCIL_TEST);
         defer gl.glDisable(gl.GL_STENCIL_TEST);
         gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
 
-        if (call.clip_path_count > 0) {
-            call.stencilClipPaths(ctx);
-
-            gl.glStencilFunc(gl.GL_EQUAL, 0x80, 0x80);
-            gl.glStencilMask(0x7F); // Don't affect clip bit
-        } else {
-            gl.glStencilFunc(gl.GL_ALWAYS, 0x00, 0xFF);
-        }
-
-        const paths = ctx.paths.items[call.path_offset..][0..call.path_count];
+        // Protect the clip bit while allowing bits 0‑6 to be modified.
+        gl.glStencilMask(0x7F);
 
         // set bindpoint for solid loc
         setUniformsSimple(ctx);
@@ -417,61 +444,43 @@ const Call = struct {
         }
         gl.glEnable(gl.GL_CULL_FACE);
 
+        // Pass 2
+
         gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
 
         setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
         ctx.checkError("fill fill");
 
-        // Draw fill
+        // Look only at bits 0‑6; fragment passes when winding mask is non‑zero.
         gl.glStencilFunc(gl.GL_NOTEQUAL, 0x00, 0x7F);
-        gl.glStencilMask(0xFF);
         gl.glStencilOp(gl.GL_ZERO, gl.GL_ZERO, gl.GL_ZERO);
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(call.triangle_offset), @intCast(call.triangle_count));
     }
 
-    fn fillConvex(call: Call, ctx: *GLContext) void {
-        defer if (call.clip_path_count > 0) gl.glDisable(gl.GL_STENCIL_TEST);
-        if (call.clip_path_count > 0) {
-            gl.glEnable(gl.GL_STENCIL_TEST);
-            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
-            defer gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
-
-            call.stencilClipPaths(ctx);
-
-            gl.glStencilFunc(gl.GL_EQUAL, 0x80, 0xFF);
-            gl.glStencilOp(gl.GL_ZERO, gl.GL_ZERO, gl.GL_ZERO);
-        }
-
-        const paths = ctx.paths.items[call.path_offset..][0..call.path_count];
-
-        setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
-        ctx.checkError("fill convex");
-
-        for (paths) |path| {
-            gl.glDrawArrays(gl.GL_TRIANGLE_FAN, @intCast(path.fill_offset), @intCast(path.fill_count));
-        }
-    }
-
     fn stroke(call: Call, ctx: *GLContext) void {
-        defer if (call.clip_path_count > 0) gl.glDisable(gl.GL_STENCIL_TEST);
-        if (call.clip_path_count > 0) {
+        defer if (call.clipped) gl.glDisable(gl.GL_STENCIL_TEST);
+
+        if (call.clipped) {
             gl.glEnable(gl.GL_STENCIL_TEST);
-            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
-            defer gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
-
-            call.stencilClipPaths(ctx);
-
-            gl.glStencilFunc(gl.GL_EQUAL, 0x80, 0xFF);
+            // Accept fragments only where bit‑7 (clip) is already set.
+            gl.glStencilFunc(gl.GL_EQUAL, 0x80, 0x80);
             gl.glStencilOp(gl.GL_ZERO, gl.GL_ZERO, gl.GL_ZERO);
+        } else {
+            // Always pass
+            gl.glStencilFunc(gl.GL_ALWAYS, 0x00, 0x7F);
         }
+
+        // Protect the clip bit while allowing bits 0‑6 to be modified.
+        gl.glStencilMask(0x7F);
 
         const paths = ctx.paths.items[call.path_offset..][0..call.path_count];
 
-        if (ctx.options.stencil_strokes and call.clip_path_count == 0) {
+        if (ctx.options.stencil_strokes and !call.clipped) {
             gl.glEnable(gl.GL_STENCIL_TEST);
             defer gl.glDisable(gl.GL_STENCIL_TEST);
 
             gl.glStencilMask(0xff);
+            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
 
             // Fill the stroke base without overlap
             gl.glStencilFunc(gl.GL_EQUAL, 0x0, 0xff);
@@ -773,11 +782,14 @@ fn renderGetTextureSize(uptr: *anyopaque, image: i32, w: *u32, h: *u32) i32 {
     return 1;
 }
 
-fn renderViewport(uptr: *anyopaque, width: f32, height: f32, devicePixelRatio: f32) void {
+fn renderBegin(uptr: *anyopaque, width: f32, height: f32, devicePixelRatio: f32) void {
     const ctx = GLContext.castPtr(uptr);
     ctx.view[0] = width;
     ctx.view[1] = height;
     _ = devicePixelRatio;
+
+    ctx.previous_clip_path_slice = &.{};
+    ctx.fullscreen_quad_offset = null;
 }
 
 fn renderCancel(uptr: *anyopaque) void {
@@ -803,6 +815,8 @@ fn renderFlush(uptr: *anyopaque) void {
         gl.glDisable(gl.GL_SCISSOR_TEST);
         gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
         gl.glStencilMask(0xffffffff);
+        gl.glClearStencil(0);
+        gl.glClear(gl.GL_STENCIL_BUFFER_BIT);
         gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP);
         gl.glStencilFunc(gl.GL_ALWAYS, 0, 0xffffffff);
         gl.glActiveTexture(gl.GL_TEXTURE0);
@@ -824,9 +838,9 @@ fn renderFlush(uptr: *anyopaque) void {
             gl.glBlendFuncSeparate(call.blend_func.src_rgb, call.blend_func.dst_rgb, call.blend_func.src_alpha, call.blend_func.dst_alpha);
             switch (call.call_type) {
                 .fill => call.fill(ctx),
-                .fill_convex => call.fillConvex(ctx),
                 .stroke => call.stroke(ctx),
                 .triangles => call.triangles(ctx),
+                .stencil => call.stencil(ctx),
             }
         }
 
@@ -845,6 +859,60 @@ fn renderFlush(uptr: *anyopaque) void {
     ctx.uniforms.clearRetainingCapacity();
 }
 
+fn flushStencilCall(uptr: *anyopaque, clip_paths: []const internal.Path) void {
+    const ctx = GLContext.castPtr(uptr);
+
+    // If lengths are zero don't compare ptrs
+    if (clip_paths.len == 0 and ctx.previous_clip_path_slice.len == 0) return;
+
+    if (clip_paths.len == ctx.previous_clip_path_slice.len and
+        @intFromPtr(clip_paths.ptr) == @intFromPtr(ctx.previous_clip_path_slice.ptr))
+    {
+        return;
+    }
+
+    ctx.previous_clip_path_slice = clip_paths;
+    const call = ctx.calls.addOne() catch return;
+    call.* = std.mem.zeroes(Call);
+    call.call_type = .stencil;
+    call.convex = clip_paths.len == 1 and clip_paths[0].convex;
+
+    // An empty clip path just clears the entire framebuffer and doesn't need vertices.
+    if (clip_paths.len == 0) return;
+
+    // Fullscreen quad
+    if (ctx.fullscreen_quad_offset == null) {
+        ctx.fullscreen_quad_offset = @intCast(ctx.verts.items.len);
+
+        ctx.verts.ensureUnusedCapacity(4) catch return;
+        ctx.verts.appendAssumeCapacity(.{ .x = ctx.view[0], .y = ctx.view[1], .u = 0.5, .v = 1.0 });
+        ctx.verts.appendAssumeCapacity(.{ .x = ctx.view[0], .y = 0, .u = 0.5, .v = 1.0 });
+        ctx.verts.appendAssumeCapacity(.{ .x = 0, .y = ctx.view[1], .u = 0.5, .v = 1.0 });
+        ctx.verts.appendAssumeCapacity(.{ .x = 0, .y = 0, .u = 0.5, .v = 1.0 });
+    }
+
+    // Quad
+    call.triangle_offset = ctx.fullscreen_quad_offset.?;
+    call.triangle_count = 4;
+    const maxVerts = maxVertCount(clip_paths);
+    ctx.verts.ensureUnusedCapacity(maxVerts) catch return;
+
+    // TODO: optimization for convex clip paths (clip_paths.len == 1 and clip_paths[0].convex)
+    ctx.paths.ensureUnusedCapacity(clip_paths.len) catch return;
+    call.path_offset = @intCast(ctx.paths.items.len);
+    call.path_count = @intCast(clip_paths.len);
+
+    for (clip_paths) |clip_path| {
+        const copy = ctx.paths.addOneAssumeCapacity();
+        copy.* = std.mem.zeroes(Path);
+        if (clip_path.fill.len > 0) {
+            copy.fill_offset = @intCast(ctx.verts.items.len);
+            copy.fill_count = @intCast(clip_path.fill.len);
+            ctx.verts.appendSliceAssumeCapacity(clip_path.fill);
+        }
+    }
+}
+
 fn renderFill(
     uptr: *anyopaque,
     paint: *nvg.Paint,
@@ -856,16 +924,17 @@ fn renderFill(
 ) void {
     const ctx = GLContext.castPtr(uptr);
 
+    flushStencilCall(uptr, clip_paths);
+
     const call = ctx.calls.addOne() catch return;
     call.* = std.mem.zeroes(Call);
     call.call_type = .fill;
-    if (paths.len == 1 and paths[0].convex) {
-        call.call_type = .fill_convex;
-    }
-    call.triangle_count = if (call.call_type == .fill or clip_paths.len > 0) 4 else 0;
+    call.clipped = clip_paths.len > 0;
+    call.convex = paths.len == 1 and paths[0].convex;
+    call.triangle_count = if (call.convex) 0 else 4;
 
     // Allocate vertices for all the paths.
-    const maxverts = maxVertCount(clip_paths) + maxVertCount(paths) + call.triangle_count;
+    const maxverts = maxVertCount(paths) + call.triangle_count;
     ctx.verts.ensureUnusedCapacity(maxverts) catch return;
 
     if (call.triangle_count > 0) {
@@ -875,23 +944,6 @@ fn renderFill(
         ctx.verts.appendAssumeCapacity(.{ .x = bounds[2], .y = bounds[1], .u = 0.5, .v = 1.0 });
         ctx.verts.appendAssumeCapacity(.{ .x = bounds[0], .y = bounds[3], .u = 0.5, .v = 1.0 });
         ctx.verts.appendAssumeCapacity(.{ .x = bounds[0], .y = bounds[1], .u = 0.5, .v = 1.0 });
-    }
-
-    if (clip_paths.len > 0) {
-        // TODO: optimization for convex clip paths (clip_paths.len == 1 and clip_paths[0].convex)
-        ctx.paths.ensureUnusedCapacity(clip_paths.len) catch return;
-        call.clip_path_offset = @intCast(ctx.paths.items.len);
-        call.clip_path_count = @intCast(clip_paths.len);
-
-        for (clip_paths) |clip_path| {
-            const copy = ctx.paths.addOneAssumeCapacity();
-            copy.* = std.mem.zeroes(Path);
-            if (clip_path.fill.len > 0) {
-                copy.fill_offset = @intCast(ctx.verts.items.len);
-                copy.fill_count = @intCast(clip_path.fill.len);
-                ctx.verts.appendSliceAssumeCapacity(clip_path.fill);
-            }
-        }
     }
 
     ctx.paths.ensureUnusedCapacity(paths.len) catch return;
@@ -908,11 +960,6 @@ fn renderFill(
             copy.fill_offset = @intCast(ctx.verts.items.len);
             copy.fill_count = @intCast(path.fill.len);
             ctx.verts.appendSliceAssumeCapacity(path.fill);
-        }
-        if (path.stroke.len > 0) {
-            copy.stroke_offset = @intCast(ctx.verts.items.len);
-            copy.stroke_count = @intCast(path.stroke.len);
-            ctx.verts.appendSliceAssumeCapacity(path.stroke);
         }
     }
 
@@ -931,42 +978,19 @@ fn renderStroke(
     clip_paths: []const internal.Path,
     paths: []const internal.Path,
 ) void {
+    _ = bounds;
     const ctx = GLContext.castPtr(uptr);
+
+    flushStencilCall(uptr, clip_paths);
 
     const call = ctx.calls.addOne() catch return;
     call.* = std.mem.zeroes(Call);
     call.call_type = .stroke;
-    call.triangle_count = if (clip_paths.len > 0) 4 else 0;
+    call.clipped = clip_paths.len > 0;
 
     // Allocate vertices for all the paths.
-    const maxverts = maxVertCount(clip_paths) + maxVertCount(paths) + call.triangle_count;
+    const maxverts = maxVertCount(paths);
     ctx.verts.ensureUnusedCapacity(maxverts) catch return;
-
-    if (call.triangle_count > 0) {
-        // Quad
-        call.triangle_offset = @intCast(ctx.verts.items.len);
-        ctx.verts.appendAssumeCapacity(.{ .x = bounds[2], .y = bounds[3], .u = 0.5, .v = 1.0 });
-        ctx.verts.appendAssumeCapacity(.{ .x = bounds[2], .y = bounds[1], .u = 0.5, .v = 1.0 });
-        ctx.verts.appendAssumeCapacity(.{ .x = bounds[0], .y = bounds[3], .u = 0.5, .v = 1.0 });
-        ctx.verts.appendAssumeCapacity(.{ .x = bounds[0], .y = bounds[1], .u = 0.5, .v = 1.0 });
-    }
-
-    if (clip_paths.len > 0) {
-        // TODO: optimization for convex clip paths (clip_paths.len == 1 and clip_paths[0].convex)
-        ctx.paths.ensureUnusedCapacity(clip_paths.len) catch return;
-        call.clip_path_offset = @intCast(ctx.paths.items.len);
-        call.clip_path_count = @intCast(clip_paths.len);
-
-        for (clip_paths) |clip_path| {
-            const copy = ctx.paths.addOneAssumeCapacity();
-            copy.* = std.mem.zeroes(Path);
-            if (clip_path.fill.len > 0) {
-                copy.fill_offset = @intCast(ctx.verts.items.len);
-                copy.fill_count = @intCast(clip_path.fill.len);
-                ctx.verts.appendSliceAssumeCapacity(clip_path.fill);
-            }
-        }
-    }
 
     ctx.paths.ensureUnusedCapacity(paths.len) catch return;
     call.path_offset = @intCast(ctx.paths.items.len);

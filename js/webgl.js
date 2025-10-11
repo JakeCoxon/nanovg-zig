@@ -81,6 +81,7 @@ export const createWebGLContext = (canvas, config) => {
   const glClear = (x) => gl.clear(x);
   const glColorMask = (r, g, b, a) => gl.colorMask(r, g, b, a);
   const glStencilMask = (mask) => gl.stencilMask(mask);
+  const glClearStencil = (s) => gl.clearStencil(s);
   const glCullFace = (mode) => gl.cullFace(mode);
   const glFrontFace = (mode) => gl.frontFace(mode);
   const glEnable = (cap) => gl.enable(cap);
@@ -386,6 +387,7 @@ export const createWebGLContext = (canvas, config) => {
     glClear,
     glColorMask,
     glStencilMask,
+    glClearStencil,
     glCreateProgram,
     glCreateShader,
     glShaderSource,

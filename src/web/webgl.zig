@@ -170,6 +170,7 @@ pub extern fn glViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei) vo
 pub extern fn glStencilFunc(func: GLenum, ref: GLint, mask: GLuint) void;
 pub extern fn glStencilMask(mask: GLuint) void;
 pub extern fn glStencilOp(fail: GLenum, zfail: GLenum, zpass: GLenum) void;
+pub extern fn glClearStencil(s: GLint) void;
 
 //
 // Extensions

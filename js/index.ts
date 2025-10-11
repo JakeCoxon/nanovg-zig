@@ -1,12 +1,16 @@
+// @ts-ignore - JS modules without types
 import { createWasmEnv } from './wasm.js';
+// @ts-ignore - JS modules without types  
 import { createWebGLContext } from './webgl.js';
+// @ts-ignore - Vite will handle this import at build time
+import wasmUrl from '../zig-out/bin/nanovg.wasm?url';
 
 export class NanoVgZig {
   instance: any;
   memory: any;
   exports: any;
   isInitialized: boolean;
-  canvas: HTMLCanvasElement | null;
+  canvas: HTMLCanvasElement | null = null;
   env: any;
 
   constructor() {
@@ -16,7 +20,7 @@ export class NanoVgZig {
     this.isInitialized = false;
   }
 
-  async init(canvas: HTMLCanvasElement, wasmPath = 'zig-out/bin/demo.wasm') {
+  async init(canvas: HTMLCanvasElement, wasmPath?: string) {
     this.canvas = canvas;
     try {
       // Import the WASM and WebGL modules
@@ -31,7 +35,8 @@ export class NanoVgZig {
       this.env = env;
 
       // Fetch and instantiate WASM
-      const response = await fetch(wasmPath);
+      const finalWasmPath = wasmPath || wasmUrl;
+      const response = await fetch(finalWasmPath);
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, { env });
 

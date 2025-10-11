@@ -8,11 +8,8 @@ pub const std_options = std.Options{
     .log_level = .info,
     .logFn = wasm.log,
 };
-const gl = @import("web/webgl.zig");
+const gl = nvg.gl.gl;
 const keys = @import("web/keys.zig");
-
-const Demo = @import("demo.zig");
-const PerfGraph = @import("perf.zig");
 
 var video_width: f32 = 1280;
 var video_height: f32 = 720;
@@ -25,8 +22,6 @@ var gpa: std.heap.GeneralPurposeAllocator(.{
 var allocator: std.mem.Allocator = undefined;
 
 var vg: nvg = undefined;
-var demo: Demo = undefined;
-var fps: PerfGraph = undefined;
 
 var prevt: f32 = 0;
 var mx: f32 = 0;
@@ -50,9 +45,6 @@ export fn onInit() void {
         logger.err("Failed to create NanoVG", .{});
         return;
     };
-
-    demo.load(vg);
-    fps = PerfGraph.init(.fps, "Frame Time");
 
     prevt = wasm.performanceNow() / 1000.0;
 }
@@ -300,11 +292,6 @@ export fn setStrokePaint() void {
 
 export fn endFrame() void {
     vg.endFrame();
-}
-
-export fn drawDemo() void {
-    const t = wasm.performanceNow() / 1000.0;
-    demo.draw(vg, mx, my, video_width, video_height, t, blowup);
 }
 
 export fn findTexture(handle: i32) u32 {

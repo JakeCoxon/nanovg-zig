@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) !void {
 
     if (target.result.cpu.arch.isWasm()) {
         nanovg_mod.addIncludePath(b.path("src/web/libc"));
-        _ = installDemo(b, target, optimize, "demo", "examples/example_wasm.zig", nanovg_mod);
+        _ = installDemo(b, target, optimize, "nanovg", "src/nanovg_wasm.zig", nanovg_mod);
     } else {
         const demo_glfw = installDemo(b, target, optimize, "demo_glfw", "examples/example_glfw.zig", nanovg_mod);
         _ = installDemo(b, target, optimize, "demo_fbo", "examples/example_fbo.zig", nanovg_mod);

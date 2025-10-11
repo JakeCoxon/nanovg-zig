@@ -12,9 +12,18 @@ export default defineConfig({
     rollupOptions: {
       external: [],
       output: {
-        globals: {}
+        globals: {},
+        assetFileNames: (assetInfo) => {
+          // Keep WASM files with their original name for easier debugging
+          if (assetInfo.name?.endsWith('.wasm')) {
+            return 'nanovg.wasm'
+          }
+          return assetInfo.name || 'assets/[name].[ext]'
+        }
       }
     },
-    outDir: 'dist'
+    outDir: 'dist',
+    // Don't inline WASM files - keep them as separate assets
+    assetsInlineLimit: 0
   }
 }) 

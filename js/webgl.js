@@ -250,7 +250,6 @@ export const createWebGLContext = (canvas, config) => {
   };
   const glBindTexture = (target, textureId) => gl.bindTexture(target, glTextures[textureId]);
   const glTexImage2D = (target, level, internalFormat, width, height, border, format, type, dataPtr, dataLen) => {
-    console.log("glTexImage2D", target, level, internalFormat, width, height, border, format, type, dataPtr, dataLen);
     const data = !dataPtr ? null : new Uint8Array(config.memory.buffer, dataPtr, dataLen);
     gl.texImage2D(target, level, internalFormat, width, height, border, format, type, data);
   };

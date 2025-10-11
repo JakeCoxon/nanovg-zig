@@ -343,3 +343,79 @@ export fn onAnimationFrame() void {
     //        wasm.download(filename, filename.len, mimetype, mimetype.len, data.ptr, data.len);
     //    }
 }
+
+// Font Management
+export fn createFontFromMemory(namePtr: [*]const u8, nameLen: usize, dataPtr: [*]const u8, dataLen: usize) i32 {
+    const name = namePtr[0..nameLen :0];
+    const data = dataPtr[0..dataLen];
+    return vg.createFontMem(name, data).handle;
+}
+
+export fn fontFaceId(fontHandle: i32) void {
+    const font = nvg.Font{ .handle = fontHandle };
+    vg.fontFaceId(font);
+}
+
+export fn fontFace(namePtr: [*]const u8, nameLen: usize) void {
+    const name = namePtr[0..nameLen :0];
+    vg.fontFace(name);
+}
+
+export fn addFallbackFontId(baseFont: i32, fallbackFont: i32) bool {
+    const base = nvg.Font{ .handle = baseFont };
+    const fallback = nvg.Font{ .handle = fallbackFont };
+    return vg.addFallbackFontId(base, fallback);
+}
+
+// Text Styling
+export fn fontSize(size: f32) void {
+    vg.fontSize(size);
+}
+
+export fn fontBlur(blur: f32) void {
+    vg.fontBlur(blur);
+}
+
+export fn textLetterSpacing(spacing: f32) void {
+    vg.textLetterSpacing(spacing);
+}
+
+export fn textLineHeight(lineHeight: f32) void {
+    vg.textLineHeight(lineHeight);
+}
+
+export fn textAlign(horizontal: u8, vertical: u8) void {
+    const text_align = nvg.TextAlign{
+        .horizontal = @enumFromInt(horizontal),
+        .vertical = @enumFromInt(vertical),
+    };
+    vg.textAlign(text_align);
+}
+
+// Text Drawing
+export fn text(x: f32, y: f32, stringPtr: [*]const u8, stringLen: usize) f32 {
+    const string = stringPtr[0..stringLen];
+    return vg.text(x, y, string);
+}
+
+export fn textBox(x: f32, y: f32, breakRowWidth: f32, stringPtr: [*]const u8, stringLen: usize) void {
+    const string = stringPtr[0..stringLen];
+    vg.textBox(x, y, breakRowWidth, string);
+}
+
+// Text Measurement
+export fn textBounds(x: f32, y: f32, stringPtr: [*]const u8, stringLen: usize, boundsPtr: [*]f32) f32 {
+    const string = stringPtr[0..stringLen];
+    const bounds: *[4]f32 = @ptrCast(boundsPtr);
+    return vg.textBounds(x, y, string, bounds);
+}
+
+export fn textBoxBounds(x: f32, y: f32, breakRowWidth: f32, stringPtr: [*]const u8, stringLen: usize, boundsPtr: [*]f32) void {
+    const string = stringPtr[0..stringLen];
+    const bounds: *[4]f32 = @ptrCast(boundsPtr);
+    vg.textBoxBounds(x, y, breakRowWidth, string, bounds);
+}
+
+export fn textMetrics(ascenderPtr: [*]f32, descenderPtr: [*]f32, lineHeightPtr: [*]f32) void {
+    vg.textMetrics(@ptrCast(ascenderPtr), @ptrCast(descenderPtr), @ptrCast(lineHeightPtr));
+}

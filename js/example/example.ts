@@ -17,10 +17,17 @@ const imagePromise = new Promise<HTMLImageElement>((resolve, reject) => {
   }
 })
 
+// Font loading example
+let fontsLoaded = false;
+let robotoFont: any = null;
+let robotoBoldFont: any = null;
+
 Promise.all([
   imagePromise,
-]).then(([image]) => {
+]).then(async ([image]) => {
 
+  // Load fonts
+  await loadFonts();
   
 
   let mx = 0, my = 0;
@@ -881,6 +888,196 @@ Promise.all([
     my = e.y;
     // vg.onMouseMove(e.x, e.y);
   });
+  
+  async function loadFonts() {
+    // Try to load fonts from the examples directory
+    
+    const fontResponse = await fetch('./examples/Roboto-Regular.ttf');
+    if (!fontResponse.ok) {
+      throw new Error('Failed to load Roboto-Regular.ttf');
+    }
+
+    const fontData = await fontResponse.arrayBuffer();
+    robotoFont = vg.createFont('roboto', fontData);
+    vg.fontFaceId(robotoFont);
+    fontsLoaded = true;
+    
+    // Try to load bold font as well
+    const boldResponse = await fetch('./examples/Roboto-Bold.ttf');
+    if (!boldResponse.ok) {
+      throw new Error('Failed to load Roboto-Bold.ttf');
+    }
+    const boldFontData = await boldResponse.arrayBuffer();
+    robotoBoldFont = vg.createFont('roboto-bold', boldFontData);
+    // Set up fallback font
+    vg.addFallbackFont(robotoFont, robotoBoldFont);
+        
+  }
+
+  // Text Drawing Examples
+  function drawTextExamples(x: number, y: number, time: number) {
+    // Only draw text examples if fonts are loaded
+    if (!fontsLoaded) {
+      return;
+    }
+    vg.fontFaceId(robotoFont);
+    
+    // Example 1: Basic text styling
+    vg.save();
+    vg.translate(x, y);
+    
+    // Set font size and color
+    vg.fontSize(24);
+    vg.fillColorRgbaf(0.2, 0.2, 0.2, 1);
+    
+    // Draw a simple text
+    vg.text(0, 0, "Hello, NanoVG Text!");
+    
+    // Example 2: Text with different alignments
+    vg.save();
+    vg.translate(0, 50);
+    vg.fontSize(18);
+    vg.fillColorRgbaf(0.4, 0.4, 0.8, 1);
+    
+    // Center aligned text
+    vg.textAlign({ horizontal: 'center', vertical: 'baseline' });
+    vg.text(0, 0, "Centered Text");
+    
+    vg.restore();
+    
+    // Example 3: Text with blur effect
+    vg.save();
+    vg.translate(0, 100);
+    vg.fontSize(20);
+    vg.fontBlur(2); // Add blur effect
+    vg.fillColorRgbaf(0.8, 0.2, 0.2, 0.8);
+    // vg.text(0, 0, "Blurred Text");
+    vg.fontBlur(0); // Reset blur
+    
+    vg.restore();
+    
+    // Example 4: Text box with wrapping
+    vg.save();
+    vg.translate(0, 150);
+    vg.fontSize(16);
+    vg.fillColorRgbaf(0.2, 0.6, 0.2, 1);
+    
+    // Draw a background for the text box
+    vg.beginPath();
+    vg.roundedRect(-5, -5, 300, 100, 5);
+    vg.fillColorRgbaf(0.95, 0.95, 0.95, 1);
+    vg.fill();
+    vg.strokeColorRgbaf(0.7, 0.7, 0.7, 1);
+    vg.strokeWidth(1);
+    vg.stroke();
+    
+    // Text box with wrapping
+    vg.fillColorRgbaf(0.2, 0.2, 0.2, 1);
+    vg.textBox(0, 0, 290, "This is a long text that should wrap within the specified width. It demonstrates the textBox functionality for multi-line text rendering.");
+    
+    vg.restore();
+    
+    // Example 5: Text metrics demonstration
+    vg.save();
+    vg.translate(0, 280);
+    vg.fontSize(14);
+    vg.fillColorRgbaf(0.6, 0.3, 0.8, 1);
+    
+    // Get text metrics
+    const metrics = vg.textMetrics();
+    const bounds = vg.textBounds(0, 0, "Metrics Test");
+    
+    // Draw text with bounds visualization
+    vg.text(0, 0, "Metrics Test");
+    
+    // Draw bounds rectangle
+    vg.beginPath();
+    vg.rect(bounds.bounds[0], bounds.bounds[1], bounds.bounds[2] - bounds.bounds[0], bounds.bounds[3] - bounds.bounds[1]);
+    vg.strokeColorRgbaf(0.8, 0.8, 0.8, 0.5);
+    vg.strokeWidth(1);
+    vg.stroke();
+    
+    // Draw metrics info
+    vg.fontSize(10);
+    vg.fillColorRgbaf(0.4, 0.4, 0.4, 1);
+    vg.text(0, 30, `Advance: ${bounds.advance.toFixed(1)}`);
+    vg.text(0, 45, `Ascender: ${metrics.ascender.toFixed(1)}`);
+    vg.text(0, 60, `Descender: ${metrics.descender.toFixed(1)}`);
+    vg.text(0, 75, `Line Height: ${metrics.lineHeight.toFixed(1)}`);
+    
+    vg.restore();
+    
+    // Example 6: Animated text
+    vg.save();
+    vg.translate(0, 320);
+    vg.fontSize(20 + Math.sin(time * 2) * 4); // Animated font size
+    vg.fillColorRgbaf(0.8, 0.4, 0.1, 0.8 + Math.sin(time * 3) * 0.2); // Animated opacity
+    // vg.text(0, 0, "Animated Text");
+    
+    vg.restore();
+    
+    // Example 7: Font switching demonstration
+    vg.save();
+    vg.translate(0, 360);
+    vg.fontSize(18);
+    vg.fillColorRgbaf(0.2, 0.2, 0.2, 1);
+    
+    // Regular font
+    vg.fontFaceId(robotoFont);
+    vg.text(0, 0, "Regular Font");
+    
+    // Bold font (if available)
+    if (robotoBoldFont) {
+      vg.fontFaceId(robotoBoldFont);
+      vg.text(0, 25, "Bold Font");
+    }
+    
+    vg.restore();
+    
+    // Example 8: Complete text API demonstration
+    vg.save();
+    vg.translate(0, 420);
+    
+    // Show text API usage with comments
+    vg.fontSize(14);
+    vg.fillColorRgbaf(0.3, 0.3, 0.3, 1);
+    
+    // Draw API documentation
+    const apiExamples = [
+      "Text API Examples:",
+      "• vg.fontSize(24) - Set font size",
+      "• vg.fontBlur(2) - Add blur effect", 
+      "• vg.textAlign({horizontal: 'center'}) - Set alignment",
+      "• vg.text(x, y, 'Hello World') - Draw text",
+      "• vg.textBox(x, y, width, 'Long text...') - Wrapped text",
+      "• vg.textBounds(x, y, 'text') - Get text metrics",
+      "• vg.createFont('name', fontData) - Load font"
+    ];
+    
+    // Draw each line
+    apiExamples.forEach((line, index) => {
+      vg.save();
+      vg.translate(0, index * 20);
+      
+      // Draw line background
+      vg.beginPath();
+      vg.rect(-5, -10, 400, 15);
+      vg.fillColorRgbaf(0.95, 0.95, 0.95, 0.5);
+      vg.fill();
+      
+      // Draw line text (placeholder)
+      vg.fillColorRgbaf(0.2, 0.2, 0.2, 1);
+      vg.beginPath();
+      vg.rect(0, -8, line.length * 8, 12);
+      vg.fill();
+      
+      vg.restore();
+    });
+    
+    vg.restore();
+    
+    vg.restore();
+  }
 
   function step(timestamp: number) {
     // onAnimationFrame(timestamp);
@@ -974,7 +1171,8 @@ Promise.all([
     drawMorphingBlob(600, 100, time);
     drawClippedGears(100, 200, time)
 
-
+    // Text Drawing Examples
+    drawTextExamples(50, 400, time);
 
     vg.endFrame();
 

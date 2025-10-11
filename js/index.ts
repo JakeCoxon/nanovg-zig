@@ -305,6 +305,202 @@ export class NanoVgZig {
   rgbf(r: number, g: number, b: number) {
     return new ColorRgba(r, g, b, 1);
   }
+
+  // String encoding helper for WASM
+  private _encodeString(str: string): { ptr: number, len: number, cleanup: () => void } {
+    const encoder = new TextEncoder();
+    const encoded = encoder.encode(str);
+    const len = encoded.length;
+    const ptr = this.exports.malloc(len);
+    
+    const memory = new Uint8Array(this.memory.buffer);
+    memory.set(encoded, ptr);
+    
+    return {
+      ptr,
+      len,
+      cleanup: () => this.exports.free(ptr)
+    };
+  }
+
+  // Font Management
+  createFont(name: string, data: ArrayBuffer | Uint8Array): FontHandle {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+
+    const { ptr: namePtr, len: nameLen, cleanup: nameCleanup } = this._encodeString(name);
+    try {
+      const dataArray = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+      const dataPtr = this.exports.malloc(dataArray.length);
+      const memory = new Uint8Array(this.memory.buffer);
+      memory.set(dataArray, dataPtr);
+      
+      const handle = this.exports.createFontFromMemory(namePtr, nameLen, dataPtr, dataArray.length);
+      
+      return new FontHandle(handle);
+    } finally {
+      nameCleanup();
+    }
+  }
+
+  fontFaceId(font: FontHandle) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    this.exports.fontFaceId(font.handle);
+  }
+
+  fontFace(name: string) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    const { ptr, len, cleanup } = this._encodeString(name);
+    try {
+      this.exports.fontFace(ptr, len);
+    } finally {
+      cleanup();
+    }
+  }
+
+  addFallbackFont(baseFont: FontHandle, fallbackFont: FontHandle): boolean {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    return this.exports.addFallbackFontId(baseFont.handle, fallbackFont.handle);
+  }
+
+  // Text Styling
+  fontSize(size: number) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    this.exports.fontSize(size);
+  }
+
+  fontBlur(blur: number) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    this.exports.fontBlur(blur);
+  }
+
+  textLetterSpacing(spacing: number) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    this.exports.textLetterSpacing(spacing);
+  }
+
+  textLineHeight(lineHeight: number) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    this.exports.textLineHeight(lineHeight);
+  }
+
+  textAlign(options: { horizontal?: 'left' | 'center' | 'right', vertical?: 'top' | 'middle' | 'bottom' | 'baseline' }) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+
+    const horizontalMap = { left: 1, center: 2, right: 4 };
+    const verticalMap = { top: 8, middle: 16, bottom: 32, baseline: 64 };
+    
+    const horizontal = horizontalMap[options.horizontal || 'left'];
+    const vertical = verticalMap[options.vertical || 'baseline'];
+    
+    this.exports.textAlign(horizontal, vertical);
+  }
+
+  // Text Drawing
+  text(x: number, y: number, text: string): number {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    const { ptr, len, cleanup } = this._encodeString(text);
+    try {
+      return this.exports.text(x, y, ptr, len);
+    } finally {
+      cleanup();
+    }
+  }
+
+  textBox(x: number, y: number, breakRowWidth: number, text: string) {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    const { ptr, len, cleanup } = this._encodeString(text);
+    try {
+      this.exports.textBox(x, y, breakRowWidth, ptr, len);
+    } finally {
+      cleanup();
+    }
+  }
+
+  // Text Measurement
+  textBounds(x: number, y: number, text: string): { advance: number, bounds: [number, number, number, number] } {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    const { ptr, len, cleanup } = this._encodeString(text);
+    try {
+      const boundsPtr = this.exports.malloc(4 * 4); // 4 floats
+      const advance = this.exports.textBounds(x, y, ptr, len, boundsPtr);
+      
+      const bounds = new Float32Array(this.memory.buffer, boundsPtr, 4);
+      const result = {
+        advance,
+        bounds: [bounds[0], bounds[1], bounds[2], bounds[3]] as [number, number, number, number]
+      };
+      
+      this.exports.free(boundsPtr);
+      return result;
+    } finally {
+      cleanup();
+    }
+  }
+
+  textBoxBounds(x: number, y: number, breakRowWidth: number, text: string): [number, number, number, number] {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    const { ptr, len, cleanup } = this._encodeString(text);
+    try {
+      const boundsPtr = this.exports.malloc(4 * 4); // 4 floats
+      this.exports.textBoxBounds(x, y, breakRowWidth, ptr, len, boundsPtr);
+      
+      const bounds = new Float32Array(this.memory.buffer, boundsPtr, 4);
+      const result = [bounds[0], bounds[1], bounds[2], bounds[3]] as [number, number, number, number];
+      
+      this.exports.free(boundsPtr);
+      return result;
+    } finally {
+      cleanup();
+    }
+  }
+
+  textMetrics(): { ascender: number, descender: number, lineHeight: number } {
+    if (!this.isInitialized) {
+      throw new Error('NanoVG Zig not initialized. Call init() first.');
+    }
+    
+    const ascenderPtr = this.exports.malloc(4);
+    const descenderPtr = this.exports.malloc(4);
+    const lineHeightPtr = this.exports.malloc(4);
+    
+    this.exports.textMetrics(ascenderPtr, descenderPtr, lineHeightPtr);
+    
+    const ascender = new Float32Array(this.memory.buffer, ascenderPtr, 1)[0];
+    const descender = new Float32Array(this.memory.buffer, descenderPtr, 1)[0];
+    const lineHeight = new Float32Array(this.memory.buffer, lineHeightPtr, 1)[0];
+    
+    this.exports.free(ascenderPtr);
+    this.exports.free(descenderPtr);
+    this.exports.free(lineHeightPtr);
+    
+    return { ascender, descender, lineHeight };
+  }
 }
 
 export class ColorRgba {
@@ -330,6 +526,10 @@ export class ImagePattern {
 export type Paint = LinearGradient | RadialGradient | BoxGradient | ImagePattern;
 
 export class ImageHandle {
+  constructor(public handle: number) {}
+}
+
+export class FontHandle {
   constructor(public handle: number) {}
 }
 

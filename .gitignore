@@ -4,6 +4,7 @@ zig-out
 
 # Dependencies
 node_modules/
+.vite
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

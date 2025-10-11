@@ -344,6 +344,12 @@ const CallType = enum {
     stencil,
 };
 
+// Call represents a single rendering operation that will be executed during renderFlush.
+// Each call type has a specific purpose in the rendering pipeline:
+// - stencil: Sets up clip paths in stencil bit 7 (persistent until manually cleared)
+// - fill: Renders filled shapes using winding algorithm with stencil bits 0-6
+// - stroke: Renders stroked shapes (clipped: bits 0-6, anti-aliased: all bits)
+// - triangles: Direct triangle rendering (used for images, etc.)
 const Call = struct {
     call_type: CallType,
     image: i32,
@@ -451,10 +457,20 @@ const Call = struct {
         setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
         ctx.checkError("fill fill");
 
-        // Look only at bits 0‑6; fragment passes when winding mask is non‑zero.
+        // Look only at bits 0‑6; fragment passes when winding mask is non‑zero
         gl.glStencilFunc(gl.GL_NOTEQUAL, 0x00, 0x7F);
+        gl.glStencilMask(0x7F);
         gl.glStencilOp(gl.GL_ZERO, gl.GL_ZERO, gl.GL_ZERO);
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(call.triangle_offset), @intCast(call.triangle_count));
+
+        // Pass 3: Clear winding bits 0–6 in the cover quad (prep for next fill)
+        gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
+        gl.glStencilMask(0x7F);
+        gl.glStencilFunc(gl.GL_ALWAYS, 0x00, 0x7F);
+        gl.glStencilOp(gl.GL_REPLACE, gl.GL_REPLACE, gl.GL_REPLACE);
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(call.triangle_offset), @intCast(call.triangle_count));
+
+        gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
     }
 
     fn stroke(call: Call, ctx: *GLContext) void {
@@ -479,37 +495,41 @@ const Call = struct {
             gl.glEnable(gl.GL_STENCIL_TEST);
             defer gl.glDisable(gl.GL_STENCIL_TEST);
 
-            gl.glStencilMask(0xff);
-            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
+            // Only use winding bits 0-6 for stroke coverage; don't touch the clip bit.
+            gl.glStencilMask(0x7F);
 
-            // Fill the stroke base without overlap
-            gl.glStencilFunc(gl.GL_EQUAL, 0x0, 0xff);
+            // --- Pass 1: build stroke coverage into stencil (no color) ---
+            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
+            // We only increment where current value == 0
+            gl.glStencilFunc(gl.GL_EQUAL, 0x0, 0x7F);
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_INCR);
+
             setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
-            ctx.checkError("stroke fill 0");
             for (paths) |path| {
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(path.stroke_offset), @intCast(path.stroke_count));
             }
 
-            // Draw anti-aliased pixels.
-            gl.glStencilFunc(gl.GL_EQUAL, 0x00, 0xff);
+            // --- Pass 2: draw visible stroke where stencil == 1 (color ON) ---
+            gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
+            gl.glStencilFunc(gl.GL_EQUAL, 0x1, 0x7F);
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP);
+
             for (paths) |path| {
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(path.stroke_offset), @intCast(path.stroke_count));
             }
 
-            // Clear stencil buffer.
+            // --- Pass 3: clear the used stencil bits (no color) ---
             gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE);
-            gl.glStencilFunc(gl.GL_ALWAYS, 0x0, 0xff);
+            gl.glStencilFunc(gl.GL_ALWAYS, 0x0, 0x7F);
             gl.glStencilOp(gl.GL_ZERO, gl.GL_ZERO, gl.GL_ZERO);
-            ctx.checkError("stroke fill 1");
+
             for (paths) |path| {
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(path.stroke_offset), @intCast(path.stroke_count));
             }
+
             gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
         } else {
             setUniforms(ctx, call.uniform_offset, call.image, call.colormap);
-            // Draw Strokes
             for (paths) |path| {
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, @intCast(path.stroke_offset), @intCast(path.stroke_count));
             }
@@ -782,6 +802,9 @@ fn renderGetTextureSize(uptr: *anyopaque, image: i32, w: *u32, h: *u32) i32 {
     return 1;
 }
 
+// renderBegin is called at the start of each frame to reset the rendering state.
+// This ensures that each frame starts with a clean slate for clip path optimization
+// and fullscreen quad caching.
 fn renderBegin(uptr: *anyopaque, width: f32, height: f32, devicePixelRatio: f32) void {
     const ctx = GLContext.castPtr(uptr);
     ctx.view[0] = width;
@@ -804,6 +827,24 @@ fn renderFlush(uptr: *anyopaque) void {
     const ctx = GLContext.castPtr(uptr);
 
     if (ctx.calls.items.len > 0) {
+        // RENDER PIPELINE OVERVIEW:
+        //
+        // 1. renderBegin() - Called at start of frame, resets state
+        // 2. renderFill/renderStroke - Called for each draw operation, builds call list
+        // 3. renderFlush() - Executes all accumulated calls in order
+        // 4. renderCancel() - Clears accumulated data (called on errors)
+        //
+        // STENCIL BUFFER USAGE:
+        // - Bit 7 (0x80): User-defined clip paths - persist until manually cleared
+        // - Bits 0-6 (0x7F): Winding numbers for fill operations - local to each fill
+        // - Each fill operation clears its winding bits before building new ones
+        // - Clip paths and winding operations never interfere with each other
+        //
+        // CALL EXECUTION ORDER:
+        // 1. Stencil calls - Set up clip paths in bit 7
+        // 2. Fill calls - Use winding algorithm with bits 0-6, respect clip bit 7
+        // 3. Stroke calls - Use bits 0-6 when clipped, all bits for anti-aliasing
+        // 4. Triangle calls - Direct rendering, respect clip bit 7
         // Setup required GL state.
         gl.glUseProgram(ctx.shader.prog);
 

@@ -39,8 +39,9 @@ pub fn main() !void {
         return error.GLFWInitFailed;
     }
     defer c.glfwTerminate();
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 2);
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 0);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 3);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 3);
+    c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
     c.glfwWindowHint(c.GLFW_SAMPLES, 4);
 
     const monitor = c.glfwGetPrimaryMonitor();
@@ -61,6 +62,8 @@ pub fn main() !void {
     if (c.gladLoadGL() == 0) {
         return error.GLADInitFailed;
     }
+
+    std.log.info("Loaded GL", .{});
 
     var vg = try nvg.gl.init(allocator, .{
         .stencil_strokes = true,

@@ -52,6 +52,8 @@ pub const GLContext = struct {
     textures: ArrayList(Texture),
     texture_id: i32 = 0,
     vert_buf: gl.GLuint = 0,
+    vao: gl.GLuint = 0,
+    dummy_tex: gl.GLuint = 0,
     calls: ArrayList(Call),
     paths: ArrayList(Path),
     verts: ArrayList(internal.Vertex),
@@ -78,6 +80,9 @@ pub const GLContext = struct {
 
     fn deinit(ctx: *GLContext) void {
         ctx.shader.delete();
+        if (ctx.vao != 0) gl.glDeleteVertexArrays(1, &ctx.vao);
+        if (ctx.vert_buf != 0) gl.glDeleteBuffers(1, &ctx.vert_buf);
+        if (ctx.dummy_tex != 0) gl.glDeleteTextures(1, &ctx.dummy_tex);
         ctx.textures.deinit();
         ctx.calls.deinit();
         ctx.paths.deinit();
@@ -664,18 +669,33 @@ fn setUniforms(ctx: *GLContext, uniform_offset: u32, image: i32, colormap: i32) 
     const frag = &ctx.uniforms.items[uniform_offset];
     gl.glUniform4fv(ctx.shader.frag_loc, 11, @ptrCast(frag));
 
+    var found_colormap = false;
+    var found_image = false;
+
     if (colormap != 0) {
         if (ctx.findTexture(colormap)) |tex| {
             gl.glActiveTexture(gl.GL_TEXTURE0 + 1);
             gl.glBindTexture(gl.GL_TEXTURE_2D, tex.tex);
-            gl.glActiveTexture(gl.GL_TEXTURE0 + 0);
+            found_colormap = true;
         }
     }
 
     if (image != 0) {
         if (ctx.findTexture(image)) |tex| {
             gl.glBindTexture(gl.GL_TEXTURE_2D, tex.tex);
+            found_image = true;
         }
+    }
+
+    // Bind dummy textures for any units that don't have real textures
+    if (!found_colormap) {
+        gl.glActiveTexture(gl.GL_TEXTURE0 + 1);
+        gl.glBindTexture(gl.GL_TEXTURE_2D, ctx.dummy_tex);
+    }
+    gl.glActiveTexture(gl.GL_TEXTURE0 + 0);
+
+    if (!found_image) {
+        gl.glBindTexture(gl.GL_TEXTURE_2D, ctx.dummy_tex);
     }
     // // If no image is set, use empty texture
     // if (tex == NULL) {
@@ -700,10 +720,15 @@ fn renderCreate(uptr: *anyopaque) !void {
     try ctx.shader.create(fragHeader, vertSrc, fragSrc);
 
     gl.glGenBuffers(1, &ctx.vert_buf);
+    gl.glGenVertexArrays(1, &ctx.vao);
 
-    // Some platforms does not allow to have samples to unset textures.
-    // Create empty one which is bound when there's no texture specified.
-    // ctx.dummyTex = glnvg__renderCreateTexture(NVG_TEXTURE_ALPHA, 1, 1, 0, NULL);
+    // Create dummy texture for empty texture units
+    gl.glGenTextures(1, &ctx.dummy_tex);
+    gl.glBindTexture(gl.GL_TEXTURE_2D, ctx.dummy_tex);
+    const white_pixel: u32 = 0xFFFFFFFF; // White pixel
+    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, 1, 1, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, &white_pixel);
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR);
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR);
 }
 
 fn renderCreateTexture(uptr: *anyopaque, tex_type: internal.TextureType, w: u32, h: u32, flags: nvg.ImageFlags, data: ?[]const u8) !i32 {
@@ -729,7 +754,7 @@ fn renderCreateTexture(uptr: *anyopaque, tex_type: internal.TextureType, w: u32,
         .none => {},
         .alpha => {
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1);
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_LUMINANCE, @intCast(w), @intCast(h), 0, gl.GL_LUMINANCE, gl.GL_UNSIGNED_BYTE, data_ptr);
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RED, @intCast(w), @intCast(h), 0, gl.GL_RED, gl.GL_UNSIGNED_BYTE, data_ptr);
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4);
         },
         .rgba => gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, @intCast(w), @intCast(h), 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, data_ptr),
@@ -784,7 +809,7 @@ fn renderUpdateTexture(uptr: *anyopaque, image: i32, x_arg: u32, y: u32, w_arg: 
         .none => {},
         .alpha => {
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1);
-            gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, x, @intCast(y), @intCast(w), @intCast(h), gl.GL_LUMINANCE, gl.GL_UNSIGNED_BYTE, data);
+            gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, x, @intCast(y), @intCast(w), @intCast(h), gl.GL_RED, gl.GL_UNSIGNED_BYTE, data);
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4);
         },
         .rgba => gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, x, @intCast(y), @intCast(w), @intCast(h), gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, data),
@@ -863,6 +888,7 @@ fn renderFlush(uptr: *anyopaque) void {
         gl.glActiveTexture(gl.GL_TEXTURE0);
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0);
 
+        gl.glBindVertexArray(ctx.vao);
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, ctx.vert_buf);
         gl.glBufferData(gl.GL_ARRAY_BUFFER, @intCast(ctx.verts.items.len * @sizeOf(internal.Vertex)), ctx.verts.items.ptr, gl.GL_STREAM_DRAW);
         gl.glEnableVertexAttribArray(0);
@@ -968,6 +994,7 @@ fn renderFill(
     flushStencilCall(uptr, clip_paths);
 
     const call = ctx.calls.addOne() catch return;
+
     call.* = std.mem.zeroes(Call);
     call.call_type = .fill;
     call.clipped = clip_paths.len > 0;

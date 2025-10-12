@@ -1,8 +1,9 @@
+#version 330
 uniform vec2 viewSize;
-attribute vec2 vertex;
-attribute vec2 tcoord;
-varying vec2 ftcoord;
-varying vec2 fpos;
+in vec2 vertex;
+in vec2 tcoord;
+out vec2 ftcoord;
+out vec2 fpos;
 void main(void)
 {
     ftcoord = tcoord;

@@ -143,6 +143,8 @@ pub const Context = struct {
         state.scissor.extent[0] = -1;
         state.scissor.extent[1] = -1;
 
+        beginPath(ctx);
+
         state.font_size = 16;
         state.letter_spacing = 0;
         state.line_height = 1;

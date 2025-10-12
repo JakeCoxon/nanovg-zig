@@ -46,7 +46,7 @@ export const createWebGLContext = (canvas, config) => {
   const glShaders = [];
   const glPrograms = [];
   const glUniformLocations = [];
-  const glVertexArrays = [];
+  const glVertexArrays = [undefined];
   const glBuffers = [];
   const glTextures = [];
   const glFramebuffers = [null];
@@ -133,6 +133,7 @@ export const createWebGLContext = (canvas, config) => {
     console.log(gl.getProgramInfoLog(glPrograms[program]));
   };
   const glGetAttribLocation = (programId, namePtr, nameLen) => gl.getAttribLocation(glPrograms[programId], config.wasmEnv.readCharStr(namePtr, nameLen));
+  const jsGetAttribLocation = (programId, namePtr, nameLen) => gl.getAttribLocation(glPrograms[programId], config.wasmEnv.readCharStr(namePtr, nameLen));
   const jsGetUniformLocation = (programId, namePtr, nameLen) => {
     glUniformLocations.push(gl.getUniformLocation(glPrograms[programId], config.wasmEnv.readCharStr(namePtr, nameLen)));
     return glUniformLocations.length - 1;
@@ -399,6 +400,7 @@ export const createWebGLContext = (canvas, config) => {
     glGetProgramiv,
     glGetProgramInfoLog,
     glGetAttribLocation,
+    jsGetAttribLocation,
     jsGetUniformLocation,
     glUniform1i,
     glUniform1f,

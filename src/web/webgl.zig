@@ -99,6 +99,7 @@ pub const GL_DECR = 0x1E03;
 
 // Buffers, Pixel Drawing/Reading
 pub const GL_LUMINANCE = 0x1909;
+pub const GL_RED = 0x1903;
 pub const GL_RGBA = 0x1908;
 
 // Scissor box
@@ -219,6 +220,10 @@ extern fn jsGetUniformLocation(program: GLuint, name: [*c]const GLchar, nameLen:
 pub fn glGetUniformLocation(program: GLuint, name: [*c]const GLchar) GLint {
     return jsGetUniformLocation(program, name, std.mem.sliceTo(name, 0).len);
 }
+extern fn jsGetAttribLocation(program: GLuint, name: [*c]const GLchar, nameLen: usize) GLint;
+pub fn glGetAttribLocation(program: GLuint, name: [*c]const GLchar) GLint {
+    return jsGetAttribLocation(program, name, std.mem.sliceTo(name, 0).len);
+}
 pub extern fn glUseProgram(program: GLuint) void;
 pub extern fn glUniform1i(location: GLint, v0: GLint) void;
 pub extern fn glUniform2fv(location: GLint, count: GLsizei, value: [*c]const GLfloat) void;
@@ -235,3 +240,8 @@ pub extern fn glDeleteRenderbuffers(n: GLsizei, renderbuffers: [*c]const GLuint)
 pub extern fn glRenderbufferStorage(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) void;
 pub extern fn glFramebufferTexture2D(target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint) void;
 pub extern fn glFramebufferRenderbuffer(target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint) void;
+
+// Vertex Array Objects
+pub extern fn glGenVertexArrays(n: GLsizei, arrays: [*c]GLuint) void;
+pub extern fn glDeleteVertexArrays(n: GLsizei, arrays: [*c]const GLuint) void;
+pub extern fn glBindVertexArray(array: GLuint) void;

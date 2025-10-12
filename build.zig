@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = !target.result.cpu.arch.isWasm(),
     });
     nanovg_mod.addIncludePath(b.path("src"));
-    nanovg_mod.addIncludePath(b.path("lib/gl2/include"));
+    nanovg_mod.addIncludePath(b.path("lib/gl3/include"));
     nanovg_mod.addCSourceFile(.{ .file = b.path("src/fontstash.c"), .flags = &.{ "-DFONS_NO_STDIO", "-fno-stack-protector" } });
     nanovg_mod.addCSourceFile(.{ .file = b.path("src/stb_image.c"), .flags = &.{ "-DSTBI_NO_STDIO", "-fno-stack-protector" } });
 
@@ -43,8 +43,8 @@ fn installDemo(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
         demo.rdynamic = true;
         demo.entry = .disabled;
     } else {
-        demo.addIncludePath(b.path("lib/gl2/include"));
-        demo.addCSourceFile(.{ .file = b.path("lib/gl2/src/glad.c"), .flags = &.{} });
+        demo.addIncludePath(b.path("lib/gl3/include"));
+        demo.addCSourceFile(.{ .file = b.path("lib/gl3/src/glad.c"), .flags = &.{} });
         switch (target.result.os.tag) {
             .windows => {
                 b.installBinFile("glfw3.dll", "glfw3.dll");

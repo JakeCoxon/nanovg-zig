@@ -900,7 +900,6 @@ Promise.all([
     const fontData = await fontResponse.arrayBuffer();
     robotoFont = vg.createFont('roboto', fontData);
     vg.fontFaceId(robotoFont);
-    fontsLoaded = true;
     
     // Try to load bold font as well
     const boldResponse = await fetch('./examples/Roboto-Bold.ttf');
@@ -911,6 +910,7 @@ Promise.all([
     robotoBoldFont = vg.createFont('roboto-bold', boldFontData);
     // Set up fallback font
     vg.addFallbackFont(robotoFont, robotoBoldFont);
+    fontsLoaded = true;
         
   }
 

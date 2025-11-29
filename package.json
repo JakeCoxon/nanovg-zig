@@ -16,11 +16,9 @@
     "dist"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
     "build:lib": "vite build --config vite.lib.config.js",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "example": "vite"
   },
   "devDependencies": {
     "vite": "^5.0.0",

@@ -1,4 +1,4 @@
-#version 330
+#version 300 es
 uniform vec2 viewSize;
 in vec2 vertex;
 in vec2 tcoord;

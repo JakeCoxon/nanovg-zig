@@ -101,6 +101,7 @@ pub const GL_DECR = 0x1E03;
 pub const GL_LUMINANCE = 0x1909;
 pub const GL_RED = 0x1903;
 pub const GL_RGBA = 0x1908;
+pub const GL_R8 = 0x8229;
 
 // Scissor box
 pub const GL_SCISSOR_TEST = 0x0C11;

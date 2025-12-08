@@ -754,7 +754,7 @@ fn renderCreateTexture(uptr: *anyopaque, tex_type: internal.TextureType, w: u32,
         .none => {},
         .alpha => {
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1);
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RED, @intCast(w), @intCast(h), 0, gl.GL_RED, gl.GL_UNSIGNED_BYTE, data_ptr);
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_R8, @intCast(w), @intCast(h), 0, gl.GL_RED, gl.GL_UNSIGNED_BYTE, data_ptr);
             gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4);
         },
         .rgba => gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, @intCast(w), @intCast(h), 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, data_ptr),

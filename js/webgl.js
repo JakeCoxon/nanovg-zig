@@ -206,7 +206,6 @@ export const createWebGLContext = (canvas, config) => {
   const glDrawElements = (mode, count, type, offset) => gl.drawElements(mode, count, type, offset);
 
   const glCreateTexture = () => {
-    if (glTextures.length - 1 === 14) debugger;
     glTextures.push(gl.createTexture());
     return glTextures.length - 1;
   };

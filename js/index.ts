@@ -288,6 +288,7 @@ export class NanoVgZig {
 
     const handle = this.exports.createImageRGBA(width, height, opts.generateMipmaps, opts.repeatX, opts.repeatY, opts.flipY, opts.premultiplied, opts.nearest, null);
     if (opts.data instanceof HTMLImageElement) {
+      if (!opts.data.complete) throw new Error('Image not complete');
       const img = opts.data;
       const tex = this.findTexture(handle);
       this.env.jsLoadTextureIMG2(tex, img);
